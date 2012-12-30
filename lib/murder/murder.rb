@@ -15,8 +15,8 @@
 # limitations under the License.
 
 namespace :murder do
-  HOST = "LC_ALL=C ifconfig | grep 'inet addr' | grep '10.*' | awk '{print $2}' | awk -F : '{print $2}' | head -1"
-  
+  HOST = "LC_ALL=C ifconfig | grep 'inet addr' | awk '{print $2}' | awk -F : '{print $2}' | head -1"
+
   desc <<-DESC
   Compresses the directory specified by the passed-in argument 'files_path' and creates a .torrent file identified by the 'tag' argument. Be sure to use the same 'tag' value with any following commands. Any .git directories will be skipped. Once completed, the .torrent will be downloaded to your local /tmp/TAG.tgz.torrent.
   DESC
@@ -55,16 +55,15 @@ namespace :murder do
   DESC
   task :start_seeding, :roles => :seeder do
     require_tag
-    #run "SCREENRC=/dev/null SYSSCREENRC=/dev/null screen -dms 'seeder-#{tag}' python #{remote_murder_path}/murder_client.py seeder '#{filename}.torrent' '#{filename}' `LC_ALL=C host $HOSTNAME | awk '/has address/ {print $4}' | head -n 1`"
-    run "SCREENRC=/dev/null SYSSCREENRC=/dev/null screen -dms 'seeder-#{tag}' python #{remote_murder_path}/murder_client.py seeder '#{filename}.torrent' '#{filename}' `#{HOST}`" 
-end
+    run "SCREENRC=/dev/null SYSSCREENRC=/dev/null screen -dms 'seeder-#{tag}' python #{remote_murder_path}/murder_client.py seeder '#{filename}.torrent' '#{filename}' `#{HOST}`"
+  end
 
   desc <<-DESC
   If the seeder is currently seeding, this will kill the process. Note that if it is not running, you will receive an error. If a peer was downloading from this seed, the peer will find another host to receive any remaining data. You must specify a valid 'tag' argument.
   DESC
   task :stop_seeding, :roles => :seeder do
     require_tag
-    pkill("SCREEN.*seeder-#{tag}")
+    run("pkill -f \"SCREEN.*seeder-#{tag}\"")
   end
 
   desc <<-DESC
@@ -94,7 +93,7 @@ end
     end
 
     upload("#{filename}.torrent", "#{filename}.torrent", :via => :scp)
-    run "python #{remote_murder_path}/murder_client.py peer '#{filename}.torrent' '#{filename}' `LC_ALL=C host $CAPISTRANO:HOST$ | awk '/has address/ {print $4}' | head -n 1`"
+    run "python #{remote_murder_path}/murder_client.py peer '#{filename}.torrent' '#{filename}' `#{HOST}`"
 
     if ENV['path_is_file']
       run "cp #{filename} #{destination_path}"
@@ -105,7 +104,7 @@ end
 
   task :stop_peering, :roles => :peer do
     require_tag
-    pkill("murder_client.py.peer*#{filename}")
+    run("pkill -f \"murder_client.py peer.*#{filename}\"")
   end
 
   task :clean_temp_files, :roles => [:peer, :seeder] do
@@ -130,9 +129,3 @@ end
     set :filename, "/tmp/#{tag}.tgz"
   end
 end
-
-#Replaces pkill because this wont fail
-def pkill(name)
-  run "ps -ef | grep #{name} | grep -v grep | awk '{print $2}' | xargs kill || echo 'no process with name #{name} found'"
-end
-
